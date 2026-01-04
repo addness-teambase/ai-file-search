@@ -1,0 +1,46 @@
+{
+  "name": "ai-file-search",
+  "version": "1.0.1",
+  "description": "AIでファイルを自然言語検索できるデスクトップアプリ",
+  "productName": "AIファイル検索",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.adness.ai-file-search",
+    "productName": "AIファイル検索",
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "installerLanguages": ["ja-JP", "en-US"],
+      "language": "1041"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ]
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "adm-zip": "^0.5.16",
+    "mammoth": "^1.8.0",
+    "pdf-parse": "^1.1.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3"
+  }
+}
