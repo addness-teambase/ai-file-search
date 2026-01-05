@@ -66,6 +66,8 @@
     .setup-section ol { padding-left: 20px; color: #aaa; font-size: 14px; line-height: 1.8; }
     .setup-section li { margin-bottom: 4px; }
 
+    .code-block { background: #0a0a0a; color: #00D4FF; font-family: monospace; font-size: 12px; padding: 12px 16px; border-radius: 6px; margin: 10px 0 16px; overflow-x: auto; user-select: all; cursor: pointer; }
+
     .note { margin-top: 24px; padding: 16px; background: #0a0a0a; border-radius: 8px; border-left: 3px solid #0066FF; }
     .note p { color: #888; font-size: 13px; line-height: 1.6; }
   </style>
@@ -122,21 +124,23 @@
       <div class="setup-section">
         <h4>Macの場合</h4>
         <ol>
+          <li>ターミナルを開く（Spotlight で「ターミナル」と検索）</li>
+          <li>以下のコマンドをコピペして Enter：</li>
+        </ol>
+        <div class="code-block">xattr -d com.apple.quarantine ~/Downloads/AI.-1.0.2-arm64.dmg</div>
+        <ol start="3">
           <li>ダウンロードした .dmg をダブルクリック</li>
           <li>アプリを「アプリケーション」フォルダにドラッグ</li>
-          <li>アプリを開くと「開発元が未確認」と表示される</li>
-          <li>「システム設定」→「プライバシーとセキュリティ」を開く</li>
-          <li>「"AIファイル検索"は開発元を確認できないため〜」の横にある<br>「このまま開く」をクリック</li>
         </ol>
       </div>
 
       <div class="setup-section">
         <h4>Windowsの場合</h4>
         <ol>
-          <li>ダウンロードした .exe をダブルクリック</li>
-          <li>「WindowsによってPCが保護されました」と表示されたら</li>
-          <li>「詳細情報」をクリック</li>
-          <li>「実行」をクリック</li>
+          <li>ダウンロードした .exe を右クリック →「プロパティ」</li>
+          <li>「全般」タブの下部にある「許可する」にチェック → OK</li>
+          <li>.exe をダブルクリックしてインストール</li>
+          <li>「WindowsによってPCが保護されました」が出たら<br>「詳細情報」→「実行」をクリック</li>
         </ol>
       </div>
 
