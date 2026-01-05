@@ -1,6 +1,6 @@
 {
   "name": "ai-file-search",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "AIでファイルを自然言語検索できるデスクトップアプリ",
   "productName": "AIファイル検索",
   "main": "src/main/main.js",
