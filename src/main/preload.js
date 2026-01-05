@@ -7,5 +7,12 @@ contextBridge.exposeInMainWorld('api', {
   getRecentFiles: () => ipcRenderer.invoke('get-recent-files'),
   search: (query) => ipcRenderer.invoke('search', query),
   openFile: (path) => ipcRenderer.invoke('open-file', path),
-  showInFinder: (path) => ipcRenderer.invoke('show-in-finder', path)
+  showInFinder: (path) => ipcRenderer.invoke('show-in-finder', path),
+  suggestOrganization: (folderPath) => ipcRenderer.invoke('suggest-organization', folderPath),
+  executeOrganization: (actions) => ipcRenderer.invoke('execute-organization', actions),
+  processChat: (message, currentFolder) => ipcRenderer.invoke('process-chat', message, currentFolder),
+  // ファイル変更通知を受け取る
+  onFileChanged: (callback) => {
+    ipcRenderer.on('file-changed', (event, change) => callback(change));
+  }
 });

@@ -218,19 +218,39 @@
     
     /* チャット */
     .chat-panel {
-      width: 340px;
+      width: 400px;
+      min-width: 300px;
+      max-width: 800px;
       background: #252525;
       border-left: 1px solid #3d3d3d;
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
-      transition: width 0.2s ease, opacity 0.2s ease;
       overflow: hidden;
+      position: relative;
     }
-    
+
     .chat-panel.collapsed {
       width: 0;
+      min-width: 0;
       border-left: none;
+    }
+
+    /* リサイズハンドル */
+    .resize-handle {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 5px;
+      cursor: ew-resize;
+      background: transparent;
+      z-index: 10;
+    }
+
+    .resize-handle:hover,
+    .resize-handle.dragging {
+      background: #0a84ff;
     }
     
     .chat-toggle {
@@ -348,6 +368,38 @@
     }
     
     .file-actions button:hover { background: #0070d4; }
+    .file-actions button.danger { background: #e74c3c; }
+    .file-actions button.danger:hover { background: #c0392b; }
+    .file-actions button.success { background: #27ae60; }
+    .file-actions button.success:hover { background: #1e8449; }
+
+    .organize-suggestion {
+      background: #2d2d2d;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-top: 8px;
+      border-left: 3px solid #f39c12;
+    }
+
+    .organize-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid #3d3d3d;
+    }
+
+    .organize-item:last-child { border-bottom: none; }
+
+    .organize-checkbox {
+      margin-top: 2px;
+      accent-color: #0a84ff;
+    }
+
+    .organize-info { flex: 1; }
+    .organize-action { font-size: 12px; font-weight: 600; color: #f39c12; }
+    .organize-target { font-size: 13px; color: #e5e5e7; margin-top: 2px; }
+    .organize-reason { font-size: 11px; color: #8e8e93; margin-top: 4px; }
     
     .chat-input-area {
       padding: 12px;
@@ -431,6 +483,10 @@
       </div>
       <div class="sidebar-section">
         <div class="sidebar-title">場所</div>
+        <div id="locationTree"></div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-title">フォルダ</div>
         <div id="folderTree"></div>
       </div>
     </div>
@@ -467,10 +523,11 @@
     </div>
     
     <div class="chat-panel" id="chatPanel">
+      <div class="resize-handle" id="resizeHandle"></div>
       <div class="chat-header">
         <div class="chat-header-left">
           <div class="chat-title">AI アシスタント</div>
-          <div class="chat-subtitle">ファイルを話し言葉で検索</div>
+          <div class="chat-subtitle">検索・整理・なんでも相談</div>
         </div>
         <button class="new-chat-btn" id="newChatBtn">
           <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
@@ -480,7 +537,14 @@
       
       <div class="chat-messages" id="chatMessages">
         <div class="message message-ai">
-          ファイルを検索できます。例: 「見積書どこ？」「先月のレポート」
+          こんにちは！ファイル管理のAIアシスタントです。<br><br>
+          <strong>検索</strong><br>
+          「見積書どこ？」「先月のレポート探して」<br><br>
+          <strong>整理</strong><br>
+          「このフォルダ整理して」→ どう整理するか聞いてから実行します<br><br>
+          <strong>確認</strong><br>
+          「PDFは何件ある？」「最近のファイル見せて」<br><br>
+          なんでも気軽に話しかけてください！
         </div>
       </div>
       
@@ -498,7 +562,70 @@
 
   <script>
     const $ = id => document.getElementById(id);
-    
+
+    // チャットセッション管理
+    const STORAGE_KEY = 'ai-file-search:chat-session';
+    let chatSession = { messages: [] };
+
+    function saveSession() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          messages: chatSession.messages,
+          lastUpdated: Date.now()
+        }));
+      } catch (e) {
+        console.log('Failed to save session:', e);
+      }
+    }
+
+    function loadSession() {
+      try {
+        const data = localStorage.getItem(STORAGE_KEY);
+        if (data) {
+          const parsed = JSON.parse(data);
+          chatSession.messages = parsed.messages || [];
+          return chatSession.messages.length > 0;
+        }
+      } catch (e) {
+        console.log('Failed to load session:', e);
+      }
+      return false;
+    }
+
+    function clearSession() {
+      chatSession.messages = [];
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch (e) {}
+    }
+
+    function restoreMessages() {
+      const container = $('chatMessages');
+      container.innerHTML = '';
+      chatSession.messages.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = `message message-${msg.type}`;
+        div.innerHTML = msg.content;
+        container.appendChild(div);
+      });
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // Finderスタイルの日本語フォルダ名マッピング
+    const FOLDER_NAME_MAP = {
+      'Desktop': 'デスクトップ',
+      'Documents': '書類',
+      'Downloads': 'ダウンロード',
+      'Applications': 'アプリケーション',
+      'Movies': 'ムービー',
+      'Music': 'ミュージック',
+      'Pictures': 'ピクチャ',
+      'Public': '公開',
+      'Library': 'ライブラリ'
+    };
+
+    const getLocalizedFolderName = (name) => FOLDER_NAME_MAP[name] || name;
+
     let folderTree = {};
     let navHistory = [];
     let navIndex = -1;
@@ -529,7 +656,7 @@
         div.innerHTML = `
           <span class="tree-expand">${hasChildren || item.children === null ? (isExpanded ? '▼' : '▶') : ''}</span>
           <svg class="tree-icon" viewBox="0 0 24 24" fill="#0a84ff"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/></svg>
-          <span class="tree-name">${item.name}</span>
+          <span class="tree-name">${item.displayName || item.name}</span>
         `;
         
         container.appendChild(div);
@@ -590,18 +717,22 @@
         navIndex = navHistory.length - 1;
       }
       updateNavButtons();
-      
+
+      // 現在のフォルダパスを保存
+      currentFolderPath = path;
+
       let contents, title;
-      
+
       if (path === 'recent') {
         const files = await window.api.getRecentFiles();
         contents = { folders: [], files };
         title = '最近の項目';
+        currentFolderPath = null;
       } else {
         contents = await window.api.getFolderContents(path);
         title = path.split('/').pop();
       }
-      
+
       renderContents(contents);
       updateBreadcrumb(path);
     }
@@ -611,22 +742,23 @@
         $('breadcrumb').innerHTML = '<span class="breadcrumb-item current">最近の項目</span>';
         return;
       }
-      
+
       const home = path.split('/').slice(0, 3).join('/');
       const parts = path.replace(home, '').split('/').filter(Boolean);
-      
+
       let html = '';
       let currentPath = home;
-      
+
       parts.forEach((p, i) => {
         currentPath += '/' + p;
         const isLast = i === parts.length - 1;
-        html += `<span class="breadcrumb-item ${isLast ? 'current' : ''}" data-path="${currentPath}">${p}</span>`;
+        const displayName = getLocalizedFolderName(p);
+        html += `<span class="breadcrumb-item ${isLast ? 'current' : ''}" data-path="${currentPath}">${displayName}</span>`;
         if (!isLast) html += '<span class="breadcrumb-sep">›</span>';
       });
-      
+
       $('breadcrumb').innerHTML = html;
-      
+
       $('breadcrumb').querySelectorAll('.breadcrumb-item').forEach(el => {
         el.onclick = () => navigateTo(el.dataset.path);
       });
@@ -659,7 +791,7 @@
           <div class="file-item" data-type="folder" data-path="${f.path}">
             <div class="file-name">
               <div class="item-icon folder"><svg viewBox="0 0 24 24" fill="#fff" width="12"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/></svg></div>
-              <span>${f.name}</span>
+              <span>${f.displayName || f.name}</span>
             </div>
             <span class="file-meta">-</span>
             <span class="file-meta">フォルダ</span>
@@ -703,13 +835,25 @@
       navigateTo('recent');
     };
     
+    // 現在のフォルダパス
+    let currentFolderPath = null;
+
+    // 初期メッセージ
+    const INITIAL_MESSAGE = `
+      こんにちは！ファイル管理のAIアシスタントです。<br><br>
+      <strong>検索</strong><br>
+      「見積書どこ？」「先月のレポート探して」<br><br>
+      <strong>整理</strong><br>
+      「このフォルダ整理して」→ どう整理するか聞いてから実行します<br><br>
+      <strong>確認</strong><br>
+      「PDFは何件ある？」「最近のファイル見せて」<br><br>
+      なんでも気軽に話しかけてください！
+    `;
+
     // 新規チャット
     function newChat() {
-      $('chatMessages').innerHTML = `
-        <div class="message message-ai">
-          ファイルを検索できます。例: 「見積書どこ？」「先月のレポート」
-        </div>
-      `;
+      clearSession();
+      $('chatMessages').innerHTML = `<div class="message message-ai">${INITIAL_MESSAGE}</div>`;
       $('chatInput').value = '';
       $('chatInput').focus();
     }
@@ -731,39 +875,237 @@
     });
     
     // チャット
-    function addMessage(html, type) {
+    function addMessage(html, type, skipSave = false) {
       const div = document.createElement('div');
       div.className = `message message-${type}`;
       div.innerHTML = html;
       $('chatMessages').appendChild(div);
       $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
+
+      // ローディング以外はセッションに保存
+      if (!skipSave && !html.includes('class="loading"')) {
+        chatSession.messages.push({
+          type: type,
+          content: html,
+          timestamp: Date.now()
+        });
+        saveSession();
+      }
+
       return div;
     }
     
+    // 現在の整理提案を保存
+    let currentOrganizeSuggestion = null;
+
     async function doSearch(query) {
       query = query.trim();
       if (!query) return;
-      
+
       addMessage(query, 'user');
+
+      const loading = addMessage('<div class="loading"><div class="spinner"></div>考え中...</div>', 'ai');
+
+      try {
+        // まずAIにメッセージを解釈させる
+        const chatRes = await window.api.processChat(query, currentFolderPath);
+        loading.remove();
+
+        console.log('AI response:', chatRes);
+
+        // AIの判断に基づいて処理
+        if (chatRes.action === 'collect_naming') {
+          // まとめ：フォルダ名入力待ち
+          addMessage(chatRes.response, 'ai');
+        } else if (chatRes.action === 'collect_confirm') {
+          // まとめ：確認待ち
+          renderCollectConfirm(chatRes);
+        } else if (chatRes.action === 'organize_hearing') {
+          // ヒアリング開始
+          addMessage(chatRes.response, 'ai');
+        } else if (chatRes.action === 'organize_confirm') {
+          // 整理提案を表示（確認待ち）
+          renderOrganizeConfirm(chatRes);
+        } else if (chatRes.action === 'organize_execute') {
+          // 整理実行
+          await executeOrganizeFromSession(chatRes);
+        } else if (chatRes.action === 'organize') {
+          // 従来の整理処理（フォールバック）
+          await doOrganize();
+        } else if (chatRes.action === 'search') {
+          // 検索結果を表示（既に実行済み）
+          if (chatRes.searchResults && chatRes.searchResults.length > 0) {
+            renderSearchResults(chatRes.response, chatRes.searchResults, chatRes.searchQuery);
+          } else {
+            addMessage(`${chatRes.response}\n\n該当するファイルは見つかりませんでした。`, 'ai');
+          }
+        } else if (chatRes.action === 'list_files') {
+          // ファイル一覧を表示
+          renderFileList(chatRes.response, chatRes.files, chatRes.totalCount, chatRes.fileType);
+        } else if (chatRes.action === 'error') {
+          addMessage(`エラー: ${chatRes.response}`, 'ai');
+        } else {
+          // チャット応答
+          addMessage(chatRes.response || 'すみません、よくわかりませんでした。', 'ai');
+        }
+
+      } catch (e) {
+        loading.remove();
+        addMessage(`エラー: ${e.message}`, 'ai');
+      }
+    }
+
+    // 整理処理
+    async function doOrganize() {
+      if (!currentFolderPath) {
+        addMessage('整理するフォルダを左のサイドバーから選択してください。', 'ai');
+        return;
+      }
+
+      const loading = addMessage('<div class="loading"><div class="spinner"></div>フォルダを分析中...</div>', 'ai');
+
+      try {
+        const res = await window.api.suggestOrganization(currentFolderPath);
+        loading.remove();
+
+        if (!res.success) {
+          addMessage(`エラー: ${res.error}`, 'ai');
+          return;
+        }
+
+        currentOrganizeSuggestion = res;
+
+        let html = `<strong>📁 整理の提案</strong><br>${res.summary || 'ファイルを整理します'}`;
+
+        if (res.suggestions && res.suggestions.length > 0) {
+          html += `<div class="organize-suggestion">`;
+          res.suggestions.forEach((s, i) => {
+            const actionLabel = {
+              'move': '📦 移動',
+              'rename': '✏️ 名前変更',
+              'create_folder': '📁 フォルダ作成',
+              'delete': '🗑️ 削除'
+            }[s.action] || s.action;
+
+            html += `
+              <div class="organize-item">
+                <input type="checkbox" class="organize-checkbox" data-index="${i}" checked>
+                <div class="organize-info">
+                  <div class="organize-action">${actionLabel}</div>
+                  <div class="organize-target">${s.target} → ${s.destination || ''}</div>
+                  <div class="organize-reason">${s.reason}</div>
+                </div>
+              </div>
+            `;
+          });
+          html += `</div>`;
+          html += `
+            <div class="file-actions" style="margin-top: 12px;">
+              <button class="success" onclick="executeOrganize()">✓ 選択した操作を実行</button>
+              <button class="danger" onclick="cancelOrganize()">✕ キャンセル</button>
+            </div>
+          `;
+        } else {
+          html += '<br>このフォルダは整理する必要がなさそうです。';
+        }
+
+        addMessage(html, 'ai');
+
+      } catch (e) {
+        loading.remove();
+        addMessage(`エラー: ${e.message}`, 'ai');
+      }
+    }
+
+    // ファイル一覧を表示（PDF何件？など）
+    function renderFileList(message, files, totalCount, fileType) {
+      let html = `<strong>${message}</strong>`;
+
+      if (files && files.length > 0) {
+        // メインエリアにも表示
+        renderContents({ folders: [], files });
+        $('breadcrumb').innerHTML = `<span class="breadcrumb-item current">${fileType.toUpperCase()}ファイル一覧</span>`;
+        $('fileCount').textContent = `${totalCount} 件`;
+
+        html += `<div style="margin-top: 8px; font-size: 12px; color: #8e8e93;">最新${files.length}件を左のエリアに表示中（全${totalCount}件）</div>`;
+
+        // チャットには最新10件を表示
+        files.slice(0, 10).forEach(f => {
+          html += `
+            <div class="file-result">
+              <div class="file-result-name">📄 ${f.name}</div>
+              <div class="file-result-path">${f.path.split('/').slice(-2).join('/')}</div>
+              <div class="file-actions">
+                <button onclick="window.api.openFile('${f.path.replace(/'/g,"\\'")}')">開く</button>
+                <button onclick="window.api.showInFinder('${f.path.replace(/'/g,"\\'")}')">Finder</button>
+              </div>
+            </div>
+          `;
+        });
+
+        if (files.length > 10) {
+          html += `<div style="margin-top: 8px; font-size: 12px; color: #8e8e93;">📋 他 ${files.length - 10}件は左のファイル一覧で確認できます</div>`;
+        }
+      } else {
+        html += `<div style="margin-top: 8px;">該当するファイルはありません。</div>`;
+      }
+
+      addMessage(html, 'ai');
+    }
+
+    // 検索結果を表示
+    function renderSearchResults(message, results, query) {
+      // メインエリアに表示（フォルダとファイルを分離してdisplayName追加）
+      const folders = results.filter(r => r.isFolder).map(f => ({
+        ...f,
+        displayName: f.name
+      }));
+      const files = results.filter(r => !r.isFolder);
+
+      renderContents({ folders, files });
+      $('breadcrumb').innerHTML = `<span class="breadcrumb-item current">検索: "${query}"</span>`;
+
+      let html = `<strong>${message}</strong>`;
+      html += `<div style="margin-top: 8px; font-size: 12px; color: #8e8e93;">${results.length}件見つかりました</div>`;
+
+      results.forEach(r => {
+        html += `
+          <div class="file-result">
+            <div class="file-result-name">${r.isFolder ? '📁' : '📄'} ${r.name}</div>
+            <div class="file-result-path">${r.path.split('/').slice(-2).join('/')}</div>
+            ${r.summary ? `<div class="file-result-summary">${r.summary}</div>` : ''}
+            <div class="file-actions">
+              <button onclick="${r.isFolder ? `navigateTo('${r.path.replace(/'/g, "\\'")}')` : `window.api.openFile('${r.path.replace(/'/g, "\\'")}')`}">開く</button>
+              <button onclick="window.api.showInFinder('${r.path.replace(/'/g,"\\'")}')">Finder</button>
+            </div>
+          </div>
+        `;
+      });
+
+      addMessage(html, 'ai');
+    }
+
+    // 実際の検索処理
+    async function doActualSearch(query) {
       const loading = addMessage('<div class="loading"><div class="spinner"></div>検索して要約中...</div>', 'ai');
-      
+
       try {
         const res = await window.api.search(query);
         loading.remove();
-        
+
         if (res.error) {
           addMessage(`エラー: ${res.error}`, 'ai');
           return;
         }
-        
+
         if (!res.results.length) {
-          addMessage('見つかりませんでした。', 'ai');
+          addMessage(`「${query}」に関連するファイルは見つかりませんでした。`, 'ai');
           return;
         }
-        
+
         renderContents({ folders: [], files: res.results });
         $('breadcrumb').innerHTML = `<span class="breadcrumb-item current">検索: "${query}"</span>`;
-        
+
         let html = `<strong>${res.results.length}件</strong>見つかりました`;
         res.results.forEach(r => {
           html += `
@@ -779,7 +1121,163 @@
           `;
         });
         addMessage(html, 'ai');
-        
+
+      } catch (e) {
+        loading.remove();
+        addMessage(`エラー: ${e.message}`, 'ai');
+      }
+    }
+
+    // 整理を実行
+    async function executeOrganize() {
+      if (!currentOrganizeSuggestion) return;
+
+      const checkboxes = document.querySelectorAll('.organize-checkbox:checked');
+      if (checkboxes.length === 0) {
+        addMessage('実行する操作を選択してください。', 'ai');
+        return;
+      }
+
+      const actions = [];
+      checkboxes.forEach(cb => {
+        const idx = parseInt(cb.dataset.index);
+        const suggestion = currentOrganizeSuggestion.suggestions[idx];
+        if (suggestion) {
+          // ファイルパスを解決
+          const file = currentOrganizeSuggestion.files.find(f =>
+            f.name === suggestion.target || f.name.includes(suggestion.target)
+          );
+
+          actions.push({
+            ...suggestion,
+            basePath: currentOrganizeSuggestion.folderPath,
+            sourcePath: file ? file.path : null
+          });
+        }
+      });
+
+      const loading = addMessage('<div class="loading"><div class="spinner"></div>整理を実行中...</div>', 'ai');
+
+      try {
+        const res = await window.api.executeOrganization(actions);
+        loading.remove();
+
+        const successCount = res.results.filter(r => r.success).length;
+        const failCount = res.results.filter(r => !r.success).length;
+
+        let html = `<strong>✓ 整理完了</strong><br>成功: ${successCount}件`;
+        if (failCount > 0) {
+          html += ` / 失敗: ${failCount}件`;
+        }
+
+        addMessage(html, 'ai');
+
+        // フォルダを再読み込み
+        if (currentFolderPath) {
+          navigateTo(currentFolderPath, false);
+        }
+
+        currentOrganizeSuggestion = null;
+
+      } catch (e) {
+        loading.remove();
+        addMessage(`エラー: ${e.message}`, 'ai');
+      }
+    }
+
+    // 整理をキャンセル
+    function cancelOrganize() {
+      currentOrganizeSuggestion = null;
+      addMessage('整理をキャンセルしました。', 'ai');
+    }
+
+    // まとめ確認を表示
+    function renderCollectConfirm(res) {
+      let html = `<strong>まとめの確認</strong><br>${res.response}`;
+
+      html += `<div style="margin-top: 12px; padding: 12px; background: #2d2d2d; border-radius: 8px; border-left: 3px solid #27ae60;">
+        <strong>これでいいですか？</strong><br>
+        <span style="color: #8e8e93; font-size: 12px;">「いいよ」で実行 / 「違う」でフォルダ名変更 / 「キャンセル」で中止</span>
+      </div>`;
+
+      addMessage(html, 'ai');
+    }
+
+    // 整理提案を確認表示（新フロー）
+    function renderOrganizeConfirm(res) {
+      let html = `<strong>📁 整理の提案</strong><br>${res.response}`;
+
+      if (res.suggestions && res.suggestions.length > 0) {
+        html += `<div class="organize-suggestion">`;
+        res.suggestions.forEach((s, i) => {
+          const actionLabel = {
+            'move': '📦 移動',
+            'rename': '✏️ 名前変更',
+            'create_folder': '📁 フォルダ作成',
+            'delete': '🗑️ 削除'
+          }[s.action] || s.action;
+
+          html += `
+            <div class="organize-item">
+              <div class="organize-info">
+                <div class="organize-action">${actionLabel}</div>
+                <div class="organize-target">${s.target} → ${s.destination || ''}</div>
+                <div class="organize-reason">${s.reason}</div>
+              </div>
+            </div>
+          `;
+        });
+        html += `</div>`;
+        html += `<div style="margin-top: 12px; padding: 12px; background: #2d2d2d; border-radius: 8px; border-left: 3px solid #0a84ff;">
+          <strong>これで確定していいですか？</strong><br>
+          <span style="color: #8e8e93; font-size: 12px;">「いいよ」で実行 / 「やり直し」で再提案 / 「キャンセル」で中止</span>
+        </div>`;
+      } else {
+        html += '<br>このフォルダは整理する必要がなさそうです。';
+      }
+
+      addMessage(html, 'ai');
+    }
+
+    // 整理を実行（新フロー）
+    async function executeOrganizeFromSession(res) {
+      const loading = addMessage('<div class="loading"><div class="spinner"></div>整理を実行中...</div>', 'ai');
+
+      try {
+        // アクションを準備
+        const actions = [];
+        if (res.suggestions) {
+          res.suggestions.forEach(suggestion => {
+            const file = res.files?.find(f =>
+              f.name === suggestion.target || f.name.includes(suggestion.target)
+            );
+
+            actions.push({
+              ...suggestion,
+              basePath: res.folderPath,
+              sourcePath: file ? file.path : null
+            });
+          });
+        }
+
+        const result = await window.api.executeOrganization(actions);
+        loading.remove();
+
+        const successCount = result.results.filter(r => r.success).length;
+        const failCount = result.results.filter(r => !r.success).length;
+
+        let html = `<strong>✓ 整理完了</strong><br>成功: ${successCount}件`;
+        if (failCount > 0) {
+          html += ` / 失敗: ${failCount}件`;
+        }
+
+        addMessage(html, 'ai');
+
+        // フォルダを再読み込み
+        if (currentFolderPath) {
+          navigateTo(currentFolderPath, false);
+        }
+
       } catch (e) {
         loading.remove();
         addMessage(`エラー: ${e.message}`, 'ai');
@@ -815,23 +1313,87 @@
       $('chatPanel').classList.toggle('collapsed');
     };
     
+    // ファイル変更通知を受け取ってリアルタイム更新
+    let refreshTimeout = null;
+    window.api.onFileChanged((change) => {
+      console.log('File changed:', change);
+
+      // 連続した変更をまとめる（デバウンス）
+      if (refreshTimeout) clearTimeout(refreshTimeout);
+      refreshTimeout = setTimeout(() => {
+        // 現在のフォルダを再読み込み
+        if (currentFolderPath && currentFolderPath !== 'recent') {
+          // 変更があったフォルダと現在のフォルダが関連しているか確認
+          const changedPath = change.dir + '/' + change.filename;
+          if (changedPath.startsWith(currentFolderPath) || currentFolderPath.startsWith(change.dir)) {
+            console.log('Refreshing current folder...');
+            navigateTo(currentFolderPath, false);
+          }
+        }
+      }, 300);
+    });
+
+    // チャットパネルのリサイズ機能
+    (function initResize() {
+      const panel = $('chatPanel');
+      const handle = $('resizeHandle');
+      let isResizing = false;
+      let startX, startWidth;
+
+      handle.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        startX = e.clientX;
+        startWidth = panel.offsetWidth;
+        handle.classList.add('dragging');
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none';
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const diff = startX - e.clientX;
+        const newWidth = Math.min(800, Math.max(300, startWidth + diff));
+        panel.style.width = newWidth + 'px';
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (isResizing) {
+          isResizing = false;
+          handle.classList.remove('dragging');
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+        }
+      });
+    })();
+
     // 初期化
     async function init() {
       const data = await window.api.init();
       folderTree = data.folderTree;
-      
-      // ツリー描画
+
+      // 場所セクション（ホームなど）
+      if (data.locations && data.locations.length > 0) {
+        const locationContainer = $('locationTree');
+        renderTree(locationContainer, data.locations);
+      }
+
+      // よく使う項目（デスクトップ、書類、ダウンロード）
       const treeContainer = $('folderTree');
-      const items = Object.values(folderTree);
-      renderTree(treeContainer, items);
-      
+      const favorites = data.favorites || Object.values(folderTree);
+      renderTree(treeContainer, favorites);
+
       // 最初のフォルダを開く
-      if (items.length > 0) {
-        navigateTo(items[0].path);
+      if (favorites.length > 0) {
+        navigateTo(favorites[0].path);
         treeContainer.querySelector('.tree-item')?.classList.add('active');
       }
+
+      // チャット履歴を復元
+      if (loadSession()) {
+        restoreMessages();
+      }
     }
-    
+
     init();
   </script>
 </body>
